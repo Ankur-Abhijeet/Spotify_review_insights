@@ -99,33 +99,63 @@ async def run_analyze(request: AnalyzeRequest):
         
     records_to_analyze = SESSION_DB["preprocessed"][:request.limit]
     
-    client = LLMClient()
-    prompt = get_analysis_prompt(records_to_analyze)
+    # Batch the requests to keep prompt size small, preventing rate limits (429) and timeouts (30s)
+    batch_size = 5
+    batches = [records_to_analyze[i:i + batch_size] for i in range(0, len(records_to_analyze), batch_size)]
     
-    try:
-        response = await client.generate_json(prompt)
-        analyzed = response.get("reviews", [])
+    client = LLMClient()
+    merged_analyzed = []
+    failed_batches_count = 0
+    
+    for idx, batch in enumerate(batches):
+        logger.info(f"[Pipeline] Processing LLM batch {idx + 1}/{len(batches)} (size: {len(batch)})...")
+        prompt = get_analysis_prompt(batch)
         
-        # Merge LLM output with original records to preserve source, body, rating, date
-        original_map = {str(r.get("review_id")): r for r in records_to_analyze}
-        
-        merged_analyzed = []
-        for a in analyzed:
-            rid = str(a.get("review_id"))
-            if rid in original_map:
-                # Merge: original data first, then LLM overwrites/adds new fields
-                merged = {**original_map[rid], **a}
-                merged_analyzed.append(merged)
+        try:
+            response = await client.generate_json(prompt)
+            analyzed = response.get("reviews", [])
+            
+            # Merge LLM output with original records to preserve source, body, rating, date
+            original_map = {str(r.get("review_id")): r for r in batch}
+            
+            batch_results_count = 0
+            for a in analyzed:
+                rid = str(a.get("review_id"))
+                if rid in original_map:
+                    # Merge: original data first, then LLM overwrites/adds new fields
+                    merged = {**original_map[rid], **a}
+                    merged_analyzed.append(merged)
+                    batch_results_count += 1
+                else:
+                    merged_analyzed.append(a)
+            
+            # If the LLM returned empty reviews list or fallback mock reviews (which usually have unknown/None IDs),
+            # we check if it is mock fallback. Standard fallback has segment "unknown" and theme "General Feedback".
+            # If we only got 1 mock fallback with no matching ID, we count it as a partial engine failure.
+            if len(analyzed) == 1 and str(analyzed[0].get("review_id")) not in original_map:
+                logger.warning(f"[Pipeline] Batch {idx + 1} returned mock fallback data instead of real LLM output.")
+                failed_batches_count += 1
             else:
-                merged_analyzed.append(a)
+                logger.info(f"[Pipeline] Batch {idx + 1} processed successfully. Extracted {batch_results_count} reviews.")
+                
+        except Exception as e:
+            logger.error(f"[Pipeline] Batch {idx + 1} failed: {e}")
+            failed_batches_count += 1
+            
+    # If all batches failed or fell back to mock data
+    if failed_batches_count == len(batches) and len(batches) > 0:
+        raise HTTPException(
+            status_code=500, 
+            detail="All AI analysis batches failed or fell back to mock data. Please verify your Groq API key and rate limits."
+        )
         
-        SESSION_DB["analyzed"] = merged_analyzed
-        
-        # Reset downstream states
-        SESSION_DB["aggregated"] = {}
-        SESSION_DB["indexed"] = False
-        
-        return {"status": "completed", "total": len(merged_analyzed)}
+    SESSION_DB["analyzed"] = merged_analyzed
+    
+    # Reset downstream states
+    SESSION_DB["aggregated"] = {}
+    SESSION_DB["indexed"] = False
+    
+    return {"status": "completed", "total": len(merged_analyzed), "failed_batches": failed_batches_count}
     except Exception as e:
         logger.error(f"[Pipeline] Analyze failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
