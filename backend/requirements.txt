@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+playwright
+beautifulsoup4
+chromadb
+pydantic
+pydantic-settings
+reportlab
+httpx
+python-dotenv
+google-play-scraper==1.2.7
+pytest
