@@ -1,7 +1,6 @@
 fastapi
 uvicorn
 beautifulsoup4
-chromadb
 pydantic
 pydantic-settings
 reportlab
