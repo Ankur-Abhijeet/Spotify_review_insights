@@ -13,11 +13,13 @@ app = FastAPI(
     version="1.0.0"
 )
 
+from backend.config import settings
+
 # Allow React Frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173", "*"], 
-    allow_credentials=True,
+    allow_origins=["*"], # Allow all origins since it's a stateless public API
+    allow_credentials=False, 
     allow_methods=["*"],
     allow_headers=["*"],
 )
