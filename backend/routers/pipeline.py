@@ -163,6 +163,32 @@ async def run_index_chat():
         logger.error(f"[Pipeline] Indexing failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/test-llm")
+async def test_llm_connection():
+    client = LLMClient()
+    result = {
+        "engine": client.engine,
+        "groq_key_configured": bool(client.groq_api_key),
+        "groq_key_prefix": client.groq_api_key[:7] if client.groq_api_key else None,
+        "primary_model": client.primary_model
+    }
+    
+    # Try calling Groq directly (bypassing the Ollama fallback) so we see the raw Groq error
+    if client.engine == "groq":
+        try:
+            response = await client._call_groq("Respond with JSON: {\"status\": \"success\"}")
+            result["groq_status"] = "success"
+            result["response"] = response
+        except Exception as e:
+            import traceback
+            result["groq_status"] = "failed"
+            result["groq_error"] = str(e)
+            result["groq_traceback"] = traceback.format_exc()
+    else:
+        result["groq_status"] = "skipped (engine is not set to groq)"
+        
+    return result
+
 @router.get("/pipeline-preview")
 async def get_pipeline_preview():
     return {
