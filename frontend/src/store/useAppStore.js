@@ -17,6 +17,18 @@ export const useAppStore = create((set) => ({
   
   pipelinePreview: null,
   
+  // Backend Status
+  backendStatus: 'checking', // 'checking' | 'online' | 'offline'
+  
+  checkBackendStatus: async () => {
+    try {
+      await apiClient.get('/usage');
+      set({ backendStatus: 'online' });
+    } catch (e) {
+      set({ backendStatus: 'offline' });
+    }
+  },
+  
   // Synchronous Step State
   lastCompletedStep: 0, // 1: Scraped, 2: Preprocessed, 3: Analyzed, 4: Aggregated, 5: Indexed
   activeJobType: null,

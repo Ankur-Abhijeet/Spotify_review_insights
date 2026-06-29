@@ -1,16 +1,60 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useAppStore } from '../store/useAppStore';
 
 const Header = () => {
-  const { summary, usage, clearDataOnLoad } = useAppStore();
+  const { summary, usage, clearDataOnLoad, backendStatus, checkBackendStatus } = useAppStore();
+
+  useEffect(() => {
+    // Initial check
+    checkBackendStatus();
+    
+    // Poll every 10 seconds
+    const interval = setInterval(() => {
+      checkBackendStatus();
+    }, 10000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   const tokenPct = Math.min((usage?.tokens_used / 500000) * 100, 100).toFixed(1);
   const reqPct = Math.min((usage?.requests_made / 14400) * 100, 100).toFixed(1);
 
+  // Status Dot helper
+  const getStatusColor = () => {
+    if (backendStatus === 'online') return '#1ed760'; // Spotify green
+    if (backendStatus === 'offline') return '#ef4444'; // Red
+    return '#a1a1aa'; // Gray
+  };
+
+  const getStatusText = () => {
+    if (backendStatus === 'online') return 'Connected';
+    if (backendStatus === 'offline') return 'Offline / Waking up';
+    return 'Checking status...';
+  };
+
   return (
     <header className="header">
-      <div className="header-left">
+      <div className="header-left" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
         <h1>Overview</h1>
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '0.4rem', 
+          padding: '0.25rem 0.6rem', 
+          background: 'rgba(255,255,255,0.03)', 
+          borderRadius: '20px',
+          border: '1px solid rgba(255,255,255,0.08)',
+          fontSize: '0.75rem'
+        }}>
+          <span style={{ 
+            width: '8px', 
+            height: '8px', 
+            borderRadius: '50%', 
+            background: getStatusColor(),
+            boxShadow: backendStatus === 'online' ? '0 0 8px #1ed760' : 'none'
+          }} />
+          <span style={{ color: 'var(--text-muted)' }}>{getStatusText()}</span>
+        </div>
       </div>
       <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
         
