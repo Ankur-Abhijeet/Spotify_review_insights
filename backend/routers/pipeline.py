@@ -156,9 +156,6 @@ async def run_analyze(request: AnalyzeRequest):
     SESSION_DB["indexed"] = False
     
     return {"status": "completed", "total": len(merged_analyzed), "failed_batches": failed_batches_count}
-    except Exception as e:
-        logger.error(f"[Pipeline] Analyze failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/aggregate")
 async def run_aggregate():
